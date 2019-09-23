@@ -1,0 +1,15 @@
+ssh-keygen -t rsa -C "wangjie216231@163.com"     ==创建密钥
+C:\Users\wangjie\.ssh  
+
+$ git remote add origin https://github.com/wangjie216231/learngit.git     ==本地执行，推送到GitHub  每次推送需要密码
+git remote add origin git@github.com:wangjie216231/origin/learngit.git
+$ git push -u origin master    ==关联本地和GitHub的master，关联后第一次推送master分支的所有内容
+error: failed to push some refs to 'https://github.com/wangjie216231/learngit.git'   ==报错
+ 意思是本地和远程的文件应该合并后才能上传本地的新文件
+ github中的README.md文件不在本地代码目录中====本地没有README文件
+ 先pull
+ git pull origin master
+ 
+ 克隆到本地库
+ git clone git@github.com:wangjie216231/origin/gitskills.git  ======没有origin======在Git目录下
+ git clone git@github.com:wangjei216231/gitskills.git
