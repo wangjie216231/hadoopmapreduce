@@ -1,0 +1,402 @@
+Mapreduce是一个分布式运算程序的编程框架，是用户开发“基于hadoop的数据分析应用”的核心框架。
+Mapreduce核心功能是将用户编写的业务逻辑代码和自带默认组件整合成一个完整的分布式运算程序，并发运行在一个hadoop集群上。
+	易于编程
+	扩展性
+	高容错性
+	适合离线处理而不适合在线处理：不擅长做实时计算、流式计算、DAG（有向图）计算
+	
+Zookeeper是一个开源的分布式的，为分布式应用提供协调服务的Apache项目。
+	基于观察者模式设计的分布式服务管理框架---观察者模式
+	Zookeeper=文件系统+通知机制
+	
+	
+	一个领导者（leader），多个跟随者（follower）组成的集群。
+	Leader负责进行投票的发起和决议，更新系统状态====按顺序第一个超过半数服务器选举出来的，后面的ID再大也是小弟
+	Follower用于接收客户请求并向客户端返回结果，在选举Leader过程中参与投票
+	集群中只要有半数以上节点存活，Zookeeper集群就能正常服务---需要半数以上才能正常工作---适合奇数台机器上配置
+	全局数据一致：每个server保存一份相同的数据副本，client无论连接到哪个server，数据都是一致的。
+	更新请求顺序进行，来自同一个client的更新请求按其发送顺序依次执行。
+	数据更新原子性，一次数据更新要么成功，要么失败。
+	实时性，在一定时间范围内，client能读到最新数据。
+
+	每个节点称做一个ZNode。每一个znode默认能够存储1MB的数据--可以通过其路径唯一标识
+	zookeeper集群自身维护了一套数据结构。---树形结构
+	Znode有4个类型
+
+应用场景
+	分布式消息同步和协调机制
+	服务器节点动态上下线
+	统一配置管理
+	负载均衡
+	集群管理等
+	
+同意配置管理
+	分布式环境下，配置文件管理和同步是问题：配置信息一致，修改配置的同步
+	配置信息写道一个Znode里面
+	各节点监听Znode
+	改Znode，zookeeper通知各节点
+	
+软负载均衡
+
+
+集群管理
+	
+zookeeper安装：
+	/opt/module/zookeeper-3.4.10/conf===zoo_sample.cfg修改为zoo.cfg修改为zoo
+	修改dataDir路径为
+	dataDir=/opt/module/zookeeper-3.4.10/zkData
+	在/opt/module/zookeeper-3.4.10/这个目录上创建zkData文件夹
+	
+	
+启动zookeeper
+	bin/zkServer.sh start
+查看状态：
+	bin/zkServer.sh status
+		ZooKeeper JMX enabled by default
+		Using config: /opt/module/zookeeper-3.4.10/bin/../conf/zoo.cfg
+		Mode: standalone
+		
+启动客户端：
+	 bin/zkCli.sh
+	 
+退出客户端：
+	quit
+
+停止zookeeper
+	zkServer.sh stop
+
+
+配置参数解读===zoo.cfg	
+	1．tickTime：通信心跳数，Zookeeper服务器心跳时间，单位毫秒
+		Zookeeper使用的基本时间，服务器之间或客户端与服务器之间维持心跳的时间间隔，也就是每个tickTime时间就会发送一个心跳，时间单位为毫秒。
+		它用于心跳机制，并且设置最小的session超时时间为两倍心跳时间。(session的最小超时时间是2*tickTime)
+	2．initLimit：LF初始通信时限
+		集群中的follower跟随者服务器(F)与leader领导者服务器(L)之间初始连接时能容忍的最多心跳数（tickTime的数量），用它来限定集群中的Zookeeper服务器连接到Leader的时限。
+		投票选举新leader的初始化时间
+		Follower在启动过程中，会从Leader同步所有最新数据，然后确定自己能够对外服务的起始状态。
+		Leader允许F在initLimit时间内完成这个工作。
+	3．syncLimit：LF同步通信时限
+		集群中Leader与Follower之间的最大响应时间单位，假如响应超过syncLimit * tickTime，
+		Leader认为Follwer死掉，从服务器列表中删除Follwer。
+		在运行过程中，Leader负责与ZK集群中所有机器进行通信，例如通过一些心跳检测机制，来检测机器的存活状态。
+		如果L发出心跳包在syncLimit之后，还没有从F那收到响应，那么就认为这个F已经不在线了。
+	4．dataDir：数据文件目录+数据持久化路径
+		保存内存数据库快照信息的位置，如果没有其他说明，更新的事务日志也保存到数据库。
+	5．clientPort：客户端连接端口
+		监听客户端连接的端口
+		
+		
+ Zookeeper内部原理
+	选举机制
+		1）半数机制（Paxos 协议）：集群中半数以上机器存活，集群可用。所以zookeeper适合装在奇数台机器上。
+		2）Zookeeper虽然在配置文件中并没有指定master和slave。但是，zookeeper工作时，是有一个节点为leader，其他则为follower，Leader是通过内部的选举机制临时产生的
+		3）以一个简单的例子来说明整个选举的过程。
+			假设有五台服务器组成的zookeeper集群，它们的id从1-5，同时它们都是最新启动的，也就是没有历史数据，在存放数据量这一点上，都是一样的。假设这些服务器依序启动，来看看会发生什么，如图5-8所示。
+
+		图5-8 Zookeeper的选举机制
+		（1）服务器1启动，此时只有它一台服务器启动了，它发出去的报没有任何响应，所以它的选举状态一直是LOOKING状态。
+		（2）服务器2启动，它与最开始启动的服务器1进行通信，互相交换自己的选举结果，由于两者都没有历史数据，所以id值较大的服务器2胜出，但是由于没有达到超过半数以上的服务器都同意选举它
+				(这个例子中的半数以上是3)，所以服务器1、2还是继续保持LOOKING状态。
+		（3）服务器3启动，根据前面的理论分析，服务器3成为服务器1、2、3中的老大，而与上面不同的是，此时有三台服务器选举了它，所以它成为了这次选举的leader。
+		（4）服务器4启动，根据前面的分析，理论上服务器4应该是服务器1、2、3、4中最大的，但是由于前面已经有半数以上的服务器选举了服务器3，所以它只能接收当小弟的命了。
+		（5）服务器5启动，同4一样当小弟。
+		
+节点类型
+	Znode有两种类型
+		短暂（ephemeral）：客户端和服务器端断开连接后，创建的节点自己删除
+		持久（persistent）：客户端和服务器端断开连接后，创建的节点不删除
+		Znode有四种形式的目录节点（默认是persistent ）
+		（1）持久化目录节点（PERSISTENT）
+			客户端与zookeeper断开连接后，该节点依旧存在、
+			
+		（2）持久化顺序编号目录节点（PERSISTENT_SEQUENTIAL）
+			客户端与zookeeper断开连接后，该节点依旧存在，只是Zookeeper给该节点名称进行顺序编号
+		
+		（3）临时目录节点（EPHEMERAL）
+			客户端与zookeeper断开连接后，该节点被删除
+		
+		（4）临时顺序编号目录节点（EPHEMERAL_SEQUENTIAL）
+			客户端与zookeeper断开连接后，该节点被删除，只是Zookeeper给该节点名称进行顺序编号，如图5-9所示=============删除了还编号，有什么意义呢
+
+
+？？？？？？？？？？？？1和2呢
+3．创建znode时设置顺序标识，znode名称后会附加一个值，顺序号是一个单调递增的计数器，由父节点维护
+4．在分布式系统中，顺序号可以被用于为所有的事件进行全局排序，这样客户端可以通过顺序号推断事件的顺序			
+	Znode+计数器：父节点维护，父节点是谁？？？？
+	
+	
+stat结构体
+	1）czxid- 引起这个znode创建的zxid，创建节点的事务的zxid
+		每次修改ZooKeeper状态都会收到一个zxid形式的时间戳，也就是ZooKeeper事务ID。
+		事务ID是ZooKeeper中所有修改总的次序。每个修改都有唯一的zxid，如果zxid1小于zxid2，那么zxid1在zxid2之前发生。
+	2）ctime - znode被创建的毫秒数(从1970年开始)
+	3）mzxid - znode最后更新的zxid
+	4）mtime - znode最后修改的毫秒数(从1970年开始)
+	5）pZxid-znode最后更新的子节点zxid
+	6）cversion - znode子节点变化号，znode子节点修改次数
+	7）dataversion - znode数据变化号
+	8）aclVersion - znode访问控制列表的变化号
+	9）ephemeralOwner- 如果是临时节点，这个是znode拥有者的session id。如果不是临时节点则是0。
+	10）dataLength- znode的数据长度
+	11）numChildren - znode子节点数量
+	
+监听器原理
+	1）首先要有一个main()线程
+	2）在main线程中创建Zookeeper客户端，这时就会创建两个线程，一个负责网络连接通信（connet），一个负责监听（listener）。
+	3）通过connect线程将注册的监听事件发送给Zookeeper。
+	4）在Zookeeper的注册监听器列表中将注册的监听事件添加到列表中。
+	5）Zookeeper监听到有数据或路径变化，就会将这个消息发送给listener线程。
+	6）listener线程内部调用了process（）方法。
+	
+	main()===1、创建zookeeper客户端===两个线程===1、connect通信=====2、把监听事件给zookeeper===3、zookeeper添加事件到列表===4、zookeeper将变化的数据给listener
+								              ===1、listener监听===5、调用precession（）
+											 
+常见的监听
+	（1）监听节点数据的变化：
+		get path [watch]
+	（2）监听子节点增减的变化
+		ls path [watch]	
+		
+工作原理，应用场景
+安装
+参数配置
+Znode节点
+监听器
+
+写数据流程
+	1）比如 Client 向 ZooKeeper 的 Server1 上写数据，发送一个写请求。
+	2）如果Server1不是Leader，那么Server1 会把接受到的请求进一步转发给Leader，因为每个ZooKeeper的Server里面有一个是Leader。这个Leader 会将写请求广播给各个Server，比如Server1和Server2， 
+		各个Server写成功后就会通知Leader。
+	3）当Leader收到大多数 Server 数据写成功了，那么就说明数据写成功了。如果这里三个节点的话，只要有两个节点数据写成功了，那么就认为数据写成功了。===？？？没成功的怎么办
+		写成功之后，Leader会告诉Server1数据写成功了。
+	4）Server1会进一步通知 Client 数据写成功了，这时就认为整个写操作成功。ZooKeeper 整个写数据流程就是这样的。
+	
+1．集群规划
+	在hadoop102、hadoop103和hadoop104三个节点上部署Zookeeper。
+2．解压安装
+	1）解压zookeeper安装包到/opt/module/目录下
+	[atguigu@hadoop102 software]$ tar -zxvf zookeeper-3.4.10.tar.gz -C /opt/module/
+（2）在/opt/module/zookeeper-3.4.10/这个目录下创建zkData
+	mkdir -p zkData
+（3）重命名/opt/module/zookeeper-3.4.10/conf这个目录下的zoo_sample.cfg为zoo.cfg
+	mv zoo_sample.cfg zoo.cfg
+3．配置zoo.cfg文件
+	（1）具体配置
+	dataDir=/opt/module/zookeeper-3.4.10/zkData
+	增加如下配置
+	#######################cluster##########################
+	server.2=hadoop102:2888:3888
+	server.3=hadoop103:2888:3888
+	server.4=hadoop104:2888:3888
+	（2）配置参数解读
+	server.A=B:C:D。
+	A是一个数字，表示这个是第几号服务器；
+	B是这个服务器的ip地址或者主机名；
+	C是这个服务器与集群中的Leader服务器交换信息的端口；
+	D是万一集群中的Leader服务器挂了，需要一个端口来重新进行选举，选出一个新的Leader，而这个端口就是用来执行选举时服务器相互通信的端口。
+	集群模式下配置一个文件myid，这个文件在dataDir目录下，这个文件里面有一个数据就是A的值，Zookeeper启动时读取此文件，拿到里面的数据与zoo.cfg里面的配置信息比较从而判断到底是哪个server。
+	
+	
+在/opt/module/zookeeper-3.4.10/zkData目录下创建一个myid的文件
+	touch myid
+		添加myid文件，注意一定要在linux里面创建，在notepad++里面很可能乱码
+	（2）编辑myid文件
+		vi myid
+		在文件中添加与server对应的编号：如2============只需要写上一个数字代表id就可以了，这个数字是上面的	A
+	（3）拷贝配置好的zookeeper到其他机器上
+		scp -r zookeeper-3.4.10/ root@hadoop103.atguigu.com:/opt/app/
+		scp -r zookeeper-3.4.10/ root@hadoop104.atguigu.com:/opt/app/
+		并分别修改myid文件中内容为3、4
+	（4）分别启动zookeeper
+		[root@hadoop102 zookeeper-3.4.10]# bin/zkServer.sh start
+		[root@hadoop103 zookeeper-3.4.10]# bin/zkServer.sh start
+		[root@hadoop104 zookeeper-3.4.10]# bin/zkServer.sh start
+	（5）查看状态
+		[root@hadoop102 zookeeper-3.4.10]# bin/zkServer.sh status
+		JMX enabled by default
+		Using config: /opt/module/zookeeper-3.4.10/bin/../conf/zoo.cfg
+		Mode: follower
+		[root@hadoop103 zookeeper-3.4.10]# bin/zkServer.sh status
+		JMX enabled by default
+		Using config: /opt/module/zookeeper-3.4.10/bin/../conf/zoo.cfg
+		Mode: leader
+		[root@hadoop104 zookeeper-3.4.5]# bin/zkServer.sh status
+		JMX enabled by default
+		Using config: /opt/module/zookeeper-3.4.10/bin/../conf/zoo.cfg
+		Mode: follower	
+	
+命令基本语法	功能描述
+	help	显示所有操作命令  
+	ls path [watch]	使用 ls 命令来查看当前znode中所包含的内容===ls /
+	ls2 path [watch]	查看当前节点数据并能看到更新次数等数据===ls2 /
+	create	普通创建  create /app1 "haha" ====haha在get里面可以看到
+	-s  含有序列 
+	-e  临时（重启或者超时消失）  create -e /appa "fhkfkl"  创建临时节点
+	get path [watch]	获得节点的值   get /app1     
+				监听到变化的提示
+							WATCHER::
+							WatchedEvent state:SyncConnected type:NodeDataChanged path:/appq
+							
+	set	设置节点的具体值   set /app1 999
+	stat	查看节点状态
+	delete	删除节点
+	rmr	递归删除节点	
+	
+	
+stat 命令
+cZxid = 0x100000004     				引起这个znode创建的zxid，创建节点的事务的zxid
+										每次修改ZooKeeper状态都会收到一个zxid形式的时间戳，也就是ZooKeeper事务ID。
+										事务ID是ZooKeeper中所有修改总的次序。每个修改都有唯一的zxid，如果zxid1小于zxid2，那么zxid1在zxid2之前发生。
+ctime = Tue Oct 08 15:38:43 CST 2019  	znode被创建的毫秒数(从1970年开始)
+mZxid = 0x10000000a						znode最后更新的zxid
+mtime = Tue Oct 08 15:47:51 CST 2019    znode最后修改的毫秒数(从1970年开始)
+pZxid = 0x100000004                     znode最后更新的子节点zxid
+cversion = 0							znode子节点变化号，znode子节点修改次数
+dataVersion = 2							znode数据变化号
+aclVersion = 0							znode访问控制列表的变化号
+ephemeralOwner = 0x0					如果是临时节点，这个是znode拥有者的session id。如果不是临时节点则是0。
+dataLength = 9							znode的数据长度
+numChildren = 0							znode子节点数量
+[zk: localhost:2181(CONNECTED) 7] stat /appq
+cZxid = 0x100000004
+ctime = Tue Oct 08 15:38:43 CST 2019
+mZxid = 0x10000000a
+mtime = Tue Oct 08 15:47:51 CST 2019
+pZxid = 0x100000004
+cversion = 0
+dataVersion = 2
+aclVersion = 0
+ephemeralOwner = 0x0
+dataLength = 9
+numChildren = 0	
+	
+
+API应用
+	环境搭建
+	添加pom文件
+	<dependencies>
+		<dependency>
+			<groupId>junit</groupId>
+			<artifactId>junit</artifactId>
+			<version>RELEASE</version>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-core</artifactId>
+			<version>2.8.2</version>
+		</dependency>
+		<!-- https://mvnrepository.com/artifact/org.apache.zookeeper/zookeeper -->
+		<dependency>
+			<groupId>org.apache.zookeeper</groupId>
+			<artifactId>zookeeper</artifactId>
+			<version>3.4.10</version>
+		</dependency>
+	</dependencies>
+	
+log4j.properties文件到项目根目录
+log4j.rootLogger=INFO, stdout  
+log4j.appender.stdout=org.apache.log4j.ConsoleAppender  
+log4j.appender.stdout.layout=org.apache.log4j.PatternLayout  
+log4j.appender.stdout.layout.ConversionPattern=%d %p [%c] - %m%n  
+log4j.appender.logfile=org.apache.log4j.FileAppender  
+log4j.appender.logfile.File=target/spring.log  
+log4j.appender.logfile.layout=org.apache.log4j.PatternLayout  
+log4j.appender.logfile.layout.ConversionPattern=%d %p [%c] - %m%n  
+	
+	
+创建ZooKeeper客户端
+	Public class  ZKDemo{
+	  private static String connectString =
+		"hadoop102:2181,hadoop103:2181,hadoop104:2181";
+		   private static int sessionTimeout = 2000;
+		 private ZooKeeper zkClient = null;
+
+		@Before
+		public void init() throws Exception {
+
+		zkClient = new ZooKeeper(connectString, sessionTimeout, new Watcher() {
+				@Override
+				public void process(WatchedEvent event) {
+					// 收到事件通知后的回调函数（用户的业务逻辑）
+					System.out.println(event.getType() + "--" + event.getPath());
+
+					// 再次启动监听
+					try {
+						zkClient.getChildren("/", true);
+					} catch (Exception e) {
+						e.printStackTrace();
+					}
+				}
+			});
+		}
+	}	
+	
+创建子节点
+	// 创建子节点
+	@Test
+	public void create() throws Exception {
+		// 数据的增删改查
+		// 参数1：要创建的节点的路径； 参数2：节点数据 ； 参数3：节点权限 ；参数4：节点的类型
+		String nodeCreated = zkClient.create("/eclipse", "hello zk".getBytes(), Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT);
+	}
+
+ 获取子节点并监听 (改造为循环监听)
+// 获取子节点
+	@Test
+	public void getChildren() throws Exception {
+		List<String> children = zkClient.getChildren("/", true);
+
+		for (String child : children) {
+			System.out.println(child);
+		}
+
+		// 延时阻塞
+		Thread.sleep(Long.MAX_VALUE);
+	}
+
+判断znode是否存在
+// 判断znode是否存在
+	@Test
+	public void exist() throws Exception {
+		Stat stat = zkClient.exists("/eclipse", false);
+
+		System.out.println(stat == null ? "not exist" : "exist");
+	}
+
+改变节点的内容
+// 改变节点的内容
+	@Test
+	public void testSet() {
+		zooKeeper.setData(“/atguigu/0308”,”i love 0308”.getBytes(),-1)
+
+		System.out.println(“data changed”);
+	}
+
+获取节点数据
+// 获取节点数据
+	@Test
+	public void testGet() {
+		Byte[] data = zooKeeper.getData(“/atguigu/0308”,true.null)
+
+		System.out.println(new String(data));
+
+        Thread.sleep(Long.)
+	}	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
