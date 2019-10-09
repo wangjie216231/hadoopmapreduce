@@ -65,6 +65,15 @@ zookeeper安装：
 停止zookeeper
 	zkServer.sh stop
 
+群起脚本
+#在脚本/etc/profile中定义的变量，在当前登陆的shell进程中source /etc/profile时，脚本中定义的变量也会进入当前登陆的进程
+
+#!/bin/bash
+echo "start zkServer..."
+for i in 102 103 104
+do
+ssh hadoop$i "source /etc/profile;/opt/module/zookeeper-3.4.10/bin/zkServer.sh start"
+done
 
 配置参数解读===zoo.cfg	
 	1．tickTime：通信心跳数，Zookeeper服务器心跳时间，单位毫秒
@@ -157,11 +166,7 @@ stat结构体
 	（2）监听子节点增减的变化
 		ls path [watch]	
 		
-工作原理，应用场景
-安装
-参数配置
-Znode节点
-监听器
+
 
 写数据流程
 	1）比如 Client 向 ZooKeeper 的 Server1 上写数据，发送一个写请求。
@@ -227,7 +232,7 @@ Znode节点
 	
 命令基本语法	功能描述
 	help	显示所有操作命令  
-	ls path [watch]	使用 ls 命令来查看当前znode中所包含的内容===ls /
+	ls path [watch]	使用 ls 命令来查看当前znode中所包含的内容===ls /   ===watch 监听
 	ls2 path [watch]	查看当前节点数据并能看到更新次数等数据===ls2 /
 	create	普通创建  create /app1 "haha" ====haha在get里面可以看到
 	-s  含有序列 
@@ -241,8 +246,12 @@ Znode节点
 	stat	查看节点状态
 	delete	删除节点
 	rmr	递归删除节点	
+	connect hadoop:103:2181  更改连接客户端103
 	
+watch代表监听
+create 时 Exception in thread "main" java.lang.ArrayIndexOutOfBoundsException: 3	
 	
+
 stat 命令
 cZxid = 0x100000004     				引起这个znode创建的zxid，创建节点的事务的zxid
 										每次修改ZooKeeper状态都会收到一个zxid形式的时间戳，也就是ZooKeeper事务ID。
@@ -255,21 +264,9 @@ cversion = 0							znode子节点变化号，znode子节点修改次数
 dataVersion = 2							znode数据变化号
 aclVersion = 0							znode访问控制列表的变化号
 ephemeralOwner = 0x0					如果是临时节点，这个是znode拥有者的session id。如果不是临时节点则是0。
-dataLength = 9							znode的数据长度
-numChildren = 0							znode子节点数量
-[zk: localhost:2181(CONNECTED) 7] stat /appq
-cZxid = 0x100000004
-ctime = Tue Oct 08 15:38:43 CST 2019
-mZxid = 0x10000000a
-mtime = Tue Oct 08 15:47:51 CST 2019
-pZxid = 0x100000004
-cversion = 0
-dataVersion = 2
-aclVersion = 0
-ephemeralOwner = 0x0
-dataLength = 9
-numChildren = 0	
-	
+dataLength = 9							*===znode的数据长度
+numChildren = 0							*===node子节点数量
+
 
 API应用
 	环境搭建
@@ -294,109 +291,126 @@ API应用
 	</dependencies>
 	
 log4j.properties文件到项目根目录
-log4j.rootLogger=INFO, stdout  
-log4j.appender.stdout=org.apache.log4j.ConsoleAppender  
-log4j.appender.stdout.layout=org.apache.log4j.PatternLayout  
-log4j.appender.stdout.layout.ConversionPattern=%d %p [%c] - %m%n  
-log4j.appender.logfile=org.apache.log4j.FileAppender  
-log4j.appender.logfile.File=target/spring.log  
-log4j.appender.logfile.layout=org.apache.log4j.PatternLayout  
-log4j.appender.logfile.layout.ConversionPattern=%d %p [%c] - %m%n  
+log4j.rootLogger=INFO, stdout
+log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
+log4j.appender.stdout.layout.ConversionPattern=%d %p [%c] - %m%n
+log4j.appender.logfile=org.apache.log4j.FileAppender
+log4j.appender.logfile.File=target/spring.log
+log4j.appender.logfile.layout=org.apache.log4j.PatternLayout
+log4j.appender.logfile.layout.ConversionPattern=%d %p [%c] - %m%n
 	
 	
-创建ZooKeeper客户端
-	Public class  ZKDemo{
-	  private static String connectString =
-		"hadoop102:2181,hadoop103:2181,hadoop104:2181";
-		   private static int sessionTimeout = 2000;
-		 private ZooKeeper zkClient = null;
+package com.atguigu.zkDemo;
 
-		@Before
-		public void init() throws Exception {
+import org.apache.zookeeper.*;
+import org.apache.zookeeper.data.Stat;
+import org.junit.Before;
+import org.junit.Test;
 
-		zkClient = new ZooKeeper(connectString, sessionTimeout, new Watcher() {
-				@Override
-				public void process(WatchedEvent event) {
-					// 收到事件通知后的回调函数（用户的业务逻辑）
-					System.out.println(event.getType() + "--" + event.getPath());
+import java.io.IOException;
+import java.util.List;
 
-					// 再次启动监听
-					try {
-						zkClient.getChildren("/", true);
-					} catch (Exception e) {
-						e.printStackTrace();
-					}
-				}
-			});
-		}
-	}	
+public class ZkDemo {
+    private String connect = "hadoop102:2181,hadoop103:2181,hadoop104:2181";
+    private int timeout = 2000;
+    private ZooKeeper zooKeeper = null;
+
+    //获取zookeeper的客户端
+    @Before
+    public void getClient() throws Exception {
+        zooKeeper = new ZooKeeper(connect, timeout, new Watcher() {
+            //接收到zookeeper发来的通知以后，做出的处理措施（自己的处理的业务逻辑）
+            @Override
+            public void process(WatchedEvent event) {//客户端收到监听反馈，作处理
+                System.out.println(event.getType() + "----" + event.getPath());
+//                try {
+//                    List<String> children = zooKeeper.getChildren("/atguigu", true);
+//                    for (String child : children){
+//                        System.out.println(child);
+//                    }
+//                } catch (Exception e) {
+//                    e.printStackTrace();
+//                }
+            }
+        });
+    }
+    //创建节点
+    @Test
+    public void testCreate() throws KeeperException, InterruptedException {
+        String path = zooKeeper.create(
+                "/atguigu", "atguigu".getBytes(),//节点，数据和数据类型，
+                ZooDefs.Ids.OPEN_ACL_UNSAFE,//？？？权限Ids类
+                CreateMode.PERSISTENT);//枚举类？？？创建节点类型临时，持久，还是？？
+        System.out.println(path);
+    }
+
+    /**
+     * 查看节点是否存在
+     */
+    @Test
+    public void testExist() throws KeeperException, InterruptedException {
+        Stat stat = zooKeeper.exists("/atguigu", false);//true 开启监听
+        System.out.println(stat == null ? "not exist":"exist");
+    }
+
+    /**
+     * 查看子节点
+     */
+    @Test
+    public void testList() throws KeeperException, InterruptedException {
+        List<String> children = zooKeeper.getChildren("/atguigu", true);
+        for (String child : children){
+            System.out.println(child);
+        }
+        Thread.sleep(Long.MAX_VALUE);
+    }
+    /**
+     * 改变节点的内容
+     */
+    @Test
+    public void testSet() throws KeeperException, InterruptedException {
+        Stat stat = zooKeeper.setData("/atguigu/0308", "i love 0308".getBytes(), -1);//？？？？？
+    }
+    /**
+     * 获取节点数据
+     */
+    @Test
+    public void testGet() throws KeeperException, InterruptedException {
+        byte[] data = zooKeeper.getData("/atguigu/0308", true, null);
+        System.out.println(new String(data));//数组转String
+        Thread.sleep(Long.MAX_VALUE);
+    }
+}
+
+
+acknowledgement   ——ack 确认  
+tmp  目录下的文件有可能被删除，所以一定要修改zookeeper 的数据存储路径，
+
+acl   访问权限列表
+
+节点的数据监听   和  节点的子节点的监听    只生效一次  ——后面会对其进行改造
+
+那幅图   ——服务器端 和 客户端  都是zookeeper 的客户端	
 	
-创建子节点
-	// 创建子节点
-	@Test
-	public void create() throws Exception {
-		// 数据的增删改查
-		// 参数1：要创建的节点的路径； 参数2：节点数据 ； 参数3：节点权限 ；参数4：节点的类型
-		String nodeCreated = zkClient.create("/eclipse", "hello zk".getBytes(), Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT);
-	}
 
- 获取子节点并监听 (改造为循环监听)
-// 获取子节点
-	@Test
-	public void getChildren() throws Exception {
-		List<String> children = zkClient.getChildren("/", true);
-
-		for (String child : children) {
-			System.out.println(child);
-		}
-
-		// 延时阻塞
-		Thread.sleep(Long.MAX_VALUE);
-	}
-
-判断znode是否存在
-// 判断znode是否存在
-	@Test
-	public void exist() throws Exception {
-		Stat stat = zkClient.exists("/eclipse", false);
-
-		System.out.println(stat == null ? "not exist" : "exist");
-	}
-
+	
+	
+工作原理，应用场景
+安装
+参数配置
+Znode节点
+监听器
+zkCli命令	
+	
+	
+获取zookeeper的客户端
+创建节点
+查看节点是否存在
+查看子节点
 改变节点的内容
-// 改变节点的内容
-	@Test
-	public void testSet() {
-		zooKeeper.setData(“/atguigu/0308”,”i love 0308”.getBytes(),-1)
-
-		System.out.println(“data changed”);
-	}
-
 获取节点数据
-// 获取节点数据
-	@Test
-	public void testGet() {
-		Byte[] data = zooKeeper.getData(“/atguigu/0308”,true.null)
-
-		System.out.println(new String(data));
-
-        Thread.sleep(Long.)
-	}	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
+观察环境变量，打印信息	
 	
 	
 	
