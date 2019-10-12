@@ -5,9 +5,11 @@ Mapreduce核心功能是将用户编写的业务逻辑代码和自带默认组�
 	高容错性
 	适合离线处理而不适合在线处理：不擅长做实时计算、流式计算、DAG（有向图）计算
 	
+https://zookeeper.apache.org/
 Zookeeper是一个开源的分布式的，为分布式应用提供协调服务的Apache项目。
 	基于观察者模式设计的分布式服务管理框架---观察者模式
 	Zookeeper=文件系统+通知机制
+基于观察者模式的协助分布式服务的框架
 	
 	
 	一个领导者（leader），多个跟随者（follower）组成的集群。
@@ -22,7 +24,11 @@ Zookeeper是一个开源的分布式的，为分布式应用提供协调服务�
 	每个节点称做一个ZNode。每一个znode默认能够存储1MB的数据--可以通过其路径唯一标识
 	zookeeper集群自身维护了一套数据结构。---树形结构
 	Znode有4个类型
+PERSISTENT
+PERSISTENT_SEQUENTIAL
 
+EPHEMERAL
+EPHEMERAL_SEQUENTIAL
 应用场景
 	分布式消息同步和协调机制
 	服务器节点动态上下线
@@ -134,20 +140,7 @@ done
 	Znode+计数器：父节点维护，父节点是谁？？？？
 	
 	
-stat结构体
-	1）czxid- 引起这个znode创建的zxid，创建节点的事务的zxid
-		每次修改ZooKeeper状态都会收到一个zxid形式的时间戳，也就是ZooKeeper事务ID。
-		事务ID是ZooKeeper中所有修改总的次序。每个修改都有唯一的zxid，如果zxid1小于zxid2，那么zxid1在zxid2之前发生。
-	2）ctime - znode被创建的毫秒数(从1970年开始)
-	3）mzxid - znode最后更新的zxid
-	4）mtime - znode最后修改的毫秒数(从1970年开始)
-	5）pZxid-znode最后更新的子节点zxid
-	6）cversion - znode子节点变化号，znode子节点修改次数
-	7）dataversion - znode数据变化号
-	8）aclVersion - znode访问控制列表的变化号
-	9）ephemeralOwner- 如果是临时节点，这个是znode拥有者的session id。如果不是临时节点则是0。
-	10）dataLength- znode的数据长度
-	11）numChildren - znode子节点数量
+
 	
 监听器原理
 	1）首先要有一个main()线程
@@ -188,21 +181,26 @@ stat结构体
 3．配置zoo.cfg文件
 	（1）具体配置
 	dataDir=/opt/module/zookeeper-3.4.10/zkData
+	在/opt/module/zookeeper-3.4.10/zkData目录下创建一个myid的文件
+	集群模式下配置一个文件myid，这个文件在dataDir目录下，这个文件里面有一个数据就是A的值，Zookeeper启动时读取此文件，拿到里面的数据与zoo.cfg里面的配置信息比较从而判断到底是哪个server。
+	只需要写上一个数字代表id就可以了，这个数字是下面的2或者3或者4	
 	增加如下配置
 	#######################cluster##########################
 	server.2=hadoop102:2888:3888
 	server.3=hadoop103:2888:3888
 	server.4=hadoop104:2888:3888
+	
 	（2）配置参数解读
 	server.A=B:C:D。
 	A是一个数字，表示这个是第几号服务器；
 	B是这个服务器的ip地址或者主机名；
 	C是这个服务器与集群中的Leader服务器交换信息的端口；
 	D是万一集群中的Leader服务器挂了，需要一个端口来重新进行选举，选出一个新的Leader，而这个端口就是用来执行选举时服务器相互通信的端口。
-	集群模式下配置一个文件myid，这个文件在dataDir目录下，这个文件里面有一个数据就是A的值，Zookeeper启动时读取此文件，拿到里面的数据与zoo.cfg里面的配置信息比较从而判断到底是哪个server。
 	
 	
-在/opt/module/zookeeper-3.4.10/zkData目录下创建一个myid的文件
+	
+	
+	
 	touch myid
 		添加myid文件，注意一定要在linux里面创建，在notepad++里面很可能乱码
 	（2）编辑myid文件
@@ -233,10 +231,10 @@ stat结构体
 命令基本语法	功能描述
 	help	显示所有操作命令  
 	ls path [watch]	使用 ls 命令来查看当前znode中所包含的内容===ls /   ===watch 监听
-	ls2 path [watch]	查看当前节点数据并能看到更新次数等数据===ls2 /
+	ls2 path [watch]	查看当前节点数据并能看到更新次数等数据===ls2 /  ==节点数组【，，，】每次建的节点是放在第一个位置插进数组的
 	create	普通创建  create /app1 "haha" ====haha在get里面可以看到
 	-s  含有序列 
-	-e  临时（重启或者超时消失）  create -e /appa "fhkfkl"  创建临时节点
+	-e  临时（重启或者超时消失）并且带序列号  create -e /appa "fhkfkl"  创建临时节点  必须带“”内容，否则创建失败
 	get path [watch]	获得节点的值   get /app1     
 				监听到变化的提示
 							WATCHER::
@@ -252,21 +250,20 @@ watch代表监听
 create 时 Exception in thread "main" java.lang.ArrayIndexOutOfBoundsException: 3	
 	
 
-stat 命令
-cZxid = 0x100000004     				引起这个znode创建的zxid，创建节点的事务的zxid
-										每次修改ZooKeeper状态都会收到一个zxid形式的时间戳，也就是ZooKeeper事务ID。
-										事务ID是ZooKeeper中所有修改总的次序。每个修改都有唯一的zxid，如果zxid1小于zxid2，那么zxid1在zxid2之前发生。
-ctime = Tue Oct 08 15:38:43 CST 2019  	znode被创建的毫秒数(从1970年开始)
-mZxid = 0x10000000a						znode最后更新的zxid
-mtime = Tue Oct 08 15:47:51 CST 2019    znode最后修改的毫秒数(从1970年开始)
-pZxid = 0x100000004                     znode最后更新的子节点zxid
-cversion = 0							znode子节点变化号，znode子节点修改次数
-dataVersion = 2							znode数据变化号
-aclVersion = 0							znode访问控制列表的变化号
-ephemeralOwner = 0x0					如果是临时节点，这个是znode拥有者的session id。如果不是临时节点则是0。
-dataLength = 9							*===znode的数据长度
-numChildren = 0							*===node子节点数量
-
+stat结构体
+	1）czxid- 引起这个znode创建的zxid，创建节点的事务的zxid
+		每次修改ZooKeeper状态都会收到一个zxid形式的时间戳，也就是ZooKeeper事务ID。
+		事务ID是ZooKeeper中所有修改总的次序。每个修改都有唯一的zxid，如果zxid1小于zxid2，那么zxid1在zxid2之前发生。
+	2）ctime - znode被创建的毫秒数(从1970年开始)
+	3）mzxid - znode最后更新的zxid
+	4）mtime - znode最后修改的毫秒数(从1970年开始)
+	5）pZxid-znode最后更新的子节点zxid
+	6）cversion - znode子节点变化号，znode子节点修改次数
+	7）dataversion - znode数据变化号
+	8）aclVersion - znode访问控制列表的变化号
+	9）ephemeralOwner- 如果是临时节点，这个是znode拥有者的session id。如果不是临时节点则是0。
+	10）dataLength- znode的数据长度
+	11）numChildren - znode子节点数量
 
 API应用
 	环境搭建
@@ -411,6 +408,257 @@ zkCli命令
 改变节点的内容
 获取节点数据
 观察环境变量，打印信息	
-	
-	
+																 Zookeeper报错Will not attempt to authenticate using SASL解决办法
+首先需要说的是，这个问题出现的原因很多，报的错误与实际可能相差比较远。总结如下：
+一、调用端和服务器端版本不统一造成的！
+二、这个问题的出现，会伴随一个非常奇怪的现象。在master所在的pc上启动start-all时，内容提示所有的regionserver已经全部启动。但是，如果你去查看masterIP：60010时 会发现其他的regionserver并没有启动，regionserver的数量只有一台。因为已经有一台regionserver是活着的，所以 hbase还是能继续使用的，这会迷惑你。查看别的机器的日志后，你就会发现上述错误。zookeeper的定位居然定位到127.0.0.1去了，这个 不科学。最后，查阅资料才发现hbase.zookeeper.quorum这个属性设置时，默认本机即为zookeeper服务器（单机使用）。这就很 简单了，只需要增加这个属性就可以了。
+
+        <property>
+                <name>hbase.zookeeper.quorum</name>
+                <value>10.82.58.213</value>
+        </property>
+
+同时，也发现如果/etc/hosts设置错误也会发生类似问题。/etc/hosts中，localhost和本机PC名都需要为127.0.0.1，因为本机PC名默认是127.0.1.1。
+ 
+三、hbase的参数设置问题 hbase-site.xml
+<property>
+<name>hbase.zookeeper.property.dataDir</name>
+<value>/opt/hadoop/zookeeper</value>
+<description>Property from ZooKeeper's config zoo.cfg.
+The directory where the snapshot is stored.
+</description>
+</property>
+
+一、unit中集中基本注解，是必须掌握的。
+
+@BeforeClass – 表示在类中的任意public static void方法执行之前执行
+@AfterClass – 表示在类中的任意public static void方法执行之后执行
+@Before – 表示在任意使用@Test注解标注的public void方法执行之前执行
+@After – 表示在任意使用@Test注解标注的public void方法执行之后执行
+@Test – 使用该注解标注的public void方法会表示为一个测试方法
+
+
+
+API介绍
+准备工作
+拷贝ZooKeeper安装目录下的zookeeper.x.x.x.jar文件到项目的classpath路径下.
+
+创建连接和回调接口
+首先需要创建ZooKeeper对象, 后续的一切操作都是基于该对象进行的.
+
+Java代码  
+ZooKeeper(String connectString, int sessionTimeout, Watcher watcher) throws IOException  
+以下为各个参数的详细说明:
+
+connectString. zookeeper server列表, 以逗号隔开. ZooKeeper对象初始化后, 将从server列表中选择一个server, 并尝试与其建立连接. 如果连接建立失败, 则会从列表的剩余项中选择一个server, 并再次尝试建立连接.
+sessionTimeout. 指定连接的超时时间.
+watcher. 事件回调接口.
+注意, 创建ZooKeeper对象时, 只要对象完成初始化便立刻返回. 建立连接是以异步的形式进行的, 当连接成功建立后, 会回调watcher的process方法. 如果想要同步建立与server的连接, 需要自己进一步封装.
+
+Java代码  
+public class ZKConnection {  
+    /** 
+     * server列表, 以逗号分割 
+     */  
+    protected String hosts = "localhost:4180,localhost:4181,localhost:4182";  
+    /** 
+     * 连接的超时时间, 毫秒 
+     */  
+    private static final int SESSION_TIMEOUT = 5000;  
+    private CountDownLatch connectedSignal = new CountDownLatch(1);  
+    protected ZooKeeper zk;  
+  
+    /** 
+     * 连接zookeeper server 
+     */  
+    public void connect() throws Exception {  
+        zk = new ZooKeeper(hosts, SESSION_TIMEOUT, new ConnWatcher());  
+        // 等待连接完成  
+        connectedSignal.await();  
+    }  
+  
+    public class ConnWatcher implements Watcher {  
+        public void process(WatchedEvent event) {  
+            // 连接建立, 回调process接口时, 其event.getState()为KeeperState.SyncConnected  
+            if (event.getState() == KeeperState.SyncConnected) {  
+                // 放开闸门, wait在connect方法上的线程将被唤醒  
+                connectedSignal.countDown();  
+            }  
+        }  
+    }  
+}  
+ 
+
+创建znode
+ZooKeeper对象的create方法用于创建znode.
+
+Java代码  
+String create(String path, byte[] data, List acl, CreateMode createMode);  
+以下为各个参数的详细说明:
+
+path. znode的路径.
+data. 与znode关联的数据.
+acl. 指定权限信息, 如果不想指定权限, 可以传入Ids.OPEN_ACL_UNSAFE.
+指定znode类型. CreateMode是一个枚举类, 从中选择一个成员传入即可. 关于znode类型的详细说明, 可参考本人的上一篇博文.
+Java代码  
+/** 
+ * 创建临时节点 
+ */  
+public void create(String nodePath, byte[] data) throws Exception {  
+    zk.create(nodePath, data, Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL);  
+}  
+ 
+
+获取子node列表
+ZooKeeper对象的getChildren方法用于获取子node列表.
+
+Java代码  
+List getChildren(String path, boolean watch);  
+watch参数用于指定是否监听path node的子node的增加和删除事件, 以及path node本身的删除事件.
+
+判断znode是否存在
+ZooKeeper对象的exists方法用于判断指定znode是否存在.
+
+Java代码  
+Stat exists(String path, boolean watch);  
+watch参数用于指定是否监听path node的创建, 删除事件, 以及数据更新事件. 如果该node存在, 则返回该node的状态信息, 否则返回null.
+
+获取node中关联的数据
+ZooKeeper对象的getData方法用于获取node关联的数据.
+
+Java代码  
+byte[] getData(String path, boolean watch, Stat stat);  
+watch参数用于指定是否监听path node的删除事件, 以及数据更新事件, 注意, 不监听path node的创建事件, 因为如果path node不存在, 该方法将抛出KeeperException.NoNodeException异常.
+stat参数是个传出参数, getData方法会将path node的状态信息设置到该参数中.
+
+更新node中关联的数据
+ZooKeeper对象的setData方法用于更新node关联的数据.
+
+Java代码  
+Stat setData(final String path, byte data[], int version);  
+data为待更新的数据.
+version参数指定要更新的数据的版本, 如果version和真实的版本不同, 更新操作将失败. 指定version为-1则忽略版本检查.
+返回path node的状态信息.
+
+删除znode
+ZooKeeper对象的delete方法用于删除znode.
+
+Java代码  
+void delete(final String path, int version);  
+version参数的作用同setData方法.
+
+其余接口
+请查看ZooKeeper对象的API文档.
+
+需要注意的几个地方
+znode中关联的数据不能超过1M. zookeeper的使命是分布式协作, 而不是数据存储.
+getChildren, getData, exists方法可指定是否监听相应的事件. 而create, delete, setData方法则会触发相应的事件的发生.
+以上介绍的几个方法大多存在其异步的重载方法, 具体请查看API说明.
+————————————————
+版权声明：本文为CSDN博主「刘嘉威」的原创文章，遵循 CC 4.0 BY-SA 版权协议，转载请附上原文出处链接及本声明。
+原文链接：https://blog.csdn.net/liu88010988/article/details/51577783
+
+
+
+
+package com.atguigu.zkDemo;
+
+import org.apache.zookeeper.KeeperException;
+import org.apache.zookeeper.WatchedEvent;
+import org.apache.zookeeper.Watcher;
+import org.apache.zookeeper.ZooKeeper;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
+public class ZkClient {
+    private static String connect = "hadoop102:2181,hadoop103:2181,hadoop104:2181";
+    private static int timeout = 2000;
+    private static ZooKeeper zooKeeper = null;
+    private static String parentPath = "/servers";
+
+    public static void main(String[] args) throws Exception {
+        //获取zookeeper的客户端
+        getClient();
+        //获取服务器列表(主机名),并监听
+        getServers();
+        //业务逻辑
+        business();
+    }
+    private static void business() throws InterruptedException {
+        System.out.println("Client is working...");
+        Thread.sleep(Long.MAX_VALUE);
+    }
+
+    private static void getServers() throws KeeperException, InterruptedException {
+        List<String> children = zooKeeper.getChildren(parentPath, true);
+        //用来装服务器的主机名
+        ArrayList<String> hosts = new ArrayList<>();
+        for (String child : children) {
+            byte[] data = zooKeeper.getData(parentPath + "/" + child, false, null);
+            hosts.add(new String(data));
+        }
+        System.out.println(hosts);
+    }
+
+    private static void getClient() throws Exception {
+        zooKeeper = new ZooKeeper(connect, timeout, new Watcher() {
+            @Override
+            public void process(WatchedEvent event) {//什么时候进入PROCESS?????
+                System.out.println(event.getType() + "-----" + event.getPath());
+                //重新获取客户端的列表
+                try {
+                    getServers();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        });
+    }
+}
+package com.atguigu.zkDemo;
+
+import org.apache.zookeeper.*;
+
+public class ZkServer {
+    private static String connect = "hadoop102:2181,hadoop103:2181,hadoop104:2181";
+    private static int timeout = 2000;
+    private static ZooKeeper zooKeeper = null;
+    private static String parentPath = "/servers";
+
+    public static void main(String[] args) throws Exception {
+        //获取zookeeper的客户端
+        getClient();
+        //启动注册
+        registServer(args[0]);
+        //业务逻辑
+        business(args[0]);
+    }
+
+    private static void business(String hostname) throws InterruptedException {
+        System.out.println(hostname + " is working...");
+        Thread.sleep(Long.MAX_VALUE);
+    }
+
+    private static void registServer(String hostname) throws KeeperException, InterruptedException {
+        //创建临时节点
+        String path = zooKeeper.create(
+                parentPath + "/server",
+                hostname.getBytes(),
+                ZooDefs.Ids.OPEN_ACL_UNSAFE,
+                CreateMode.EPHEMERAL_SEQUENTIAL);
+        System.out.println(hostname + " is online " + path);
+    }
+
+    private static void getClient() throws Exception {
+        zooKeeper = new ZooKeeper(connect, timeout, new Watcher() {
+            @Override
+            public void process(WatchedEvent event) {
+                System.out.println(event.getType() + "---" + event.getPath());
+            }
+        });
+    }
+}
+
 	
